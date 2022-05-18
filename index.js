@@ -5,6 +5,7 @@ require('dotenv').config()
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const { query } = require('express');
 const { response } = require('express');
+const ObjectId = require('mongodb').ObjectId;
 
 const app = express()
 
@@ -46,8 +47,24 @@ async function run() {
         const serviceCollection = database.collection('services')
         const bookingCollection = database.collection('bookings')
         const userCollection = database.collection('users')
+        const doctorCollection = database.collection('doctors')
 
 
+
+
+
+        const verifyAdmin = async (req, res, next) => {
+
+            const requester = req.decoded.email;
+            const requesterAccount = await userCollection.findOne({ email: requester })
+            if (requesterAccount.role === 'admin') {
+                next()
+                console.log("this")
+            } else {
+                res.status(403).send({ message: 'Forbidden' })
+            }
+
+        }
 
 
 
@@ -68,22 +85,14 @@ async function run() {
 
 
         // make an Admin
-        app.put('/users/admin/:email', verifyJwt, async (req, res) => {
+        app.put('/users/admin/:email', verifyJwt, verifyAdmin, async (req, res) => {
             const email = req.params.email;
             const filter = { email: email }
-            const requester = req.decoded.email;
-            const requesterAccount = await userCollection.findOne({ email: requester })
-            if (requesterAccount.role === 'admin') {
-                const updateDoc = {
-                    $set: { role: 'admin' }
-                }
-                const result = await userCollection.updateOne(filter, updateDoc)
-                res.send(result)
+            const updateDoc = {
+                $set: { role: 'admin' }
             }
-            else {
-                res.status(403).send({ message: 'Forbidden' })
-            }
-
+            const result = await userCollection.updateOne(filter, updateDoc)
+            res.send(result)
         })
 
 
@@ -101,7 +110,7 @@ async function run() {
         // get all services 
         app.get('/services', async (req, res) => {
             const query = {}
-            const cursor = serviceCollection.find(query)
+            const cursor = serviceCollection.find(query).project({ name: 1 })
             const result = await cursor.toArray()
             res.send(result)
         })
@@ -178,6 +187,31 @@ async function run() {
             }
 
         })
+
+
+        // make a doctors collection 
+        app.post("/doctors", verifyJwt, verifyAdmin, async (req, res) => {
+            const doctor = req.body;
+            const result = await doctorCollection.insertOne(doctor)
+            res.send(result)
+        })
+
+        // get all the doctors 
+        app.get("/doctors", async (req, res) => {
+            const result = await doctorCollection.find({}).toArray()
+            res.send(result)
+        })
+
+        // delete the doctor 
+        app.delete("/doctors/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = ({ _id: ObjectId(id) })
+            const result = await doctorCollection.deleteOne(query)
+            res.send(result)
+        })
+
+
+
     }
     finally { }
 }
